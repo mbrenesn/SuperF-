@@ -39,11 +39,11 @@ int main(int argc, char **argv)
   double d_en = en[1] - en[0];
   double mu_l = 0.5; // chemical potential left
   double mu_r = -0.5; // chemical potential right
-  double t_l = 5.0; // temperature left
-  double t_r = 5.0; // temperature right 
+  double t_l = 0.1; // temperature left
+  double t_r = 0.1; // temperature right 
 
   // Gamma from LB
-  double Gamma = 0.9;
+  double Gamma = 1.0;
   // Hopping parameter between dot and eigenmodes
   double t = std::sqrt( (d_en * Gamma) / (2.0 * pi) );
   // Thermalisation rate
@@ -74,26 +74,26 @@ int main(int argc, char **argv)
   MKL_INT samp = 20;
   std::vector<double> epsilon = linspace(-1.8 * w, 1.8 * w, samp);
 
-  // Superfermion solution
-  // Construct the entire system Hamiltonian: dot + left leaf + right lead
-  std::vector<double> H( h_size * h_size );
-  for(MKL_INT i = 0; i < N; ++i){
-    H[(h_size * (i + 1)) + (i + 1)] = en[i]; 
-    H[(h_size * (N + i + 1)) + (N + i + 1)] = en[i]; 
-  }
-  for(MKL_INT i = 1; i < h_size; ++i){
-    H[i] = -1.0 * t; 
-    H[(h_size * i)] = -1.0 * t; 
-  }
-
   std::vector<double> dens_sf(samp, 0.0);
   std::vector<double> curr_sf(samp, 0.0);
   std::vector<double> ener_sf_dot(samp, 0.0);
   std::vector<double> ener_sf_lead_left(samp, 0.0);
   std::vector<double> ener_sf_lead_right(samp, 0.0);
   for(MKL_INT sp = 0; sp < samp; ++sp){
-
+    
+    // Superfermion solution
+    // Construct the entire system Hamiltonian: dot + left leaf + right lead
+    std::vector<double> H( h_size * h_size );
+    for(MKL_INT i = 0; i < N; ++i){
+      H[(h_size * (i + 1)) + (i + 1)] = en[i]; 
+      H[(h_size * (N + i + 1)) + (N + i + 1)] = en[i]; 
+    }
+    for(MKL_INT i = 1; i < h_size; ++i){
+      H[i] = -1.0 * t; 
+      H[(h_size * i)] = -1.0 * t; 
+    }
     H[0] = epsilon[sp];
+    
     // Superfermion solution to the correlation matrix
     std::vector< std::complex<double> > corr;
     corr = Utils::super_fermion_solve(H, Ge, Gd, h_size);
