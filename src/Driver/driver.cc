@@ -83,7 +83,7 @@ int main(int argc, char **argv)
     
     // Superfermion solution
     // Construct the entire system Hamiltonian: dot + left leaf + right lead
-    std::vector<double> H( h_size * h_size );
+    std::vector<double> H( h_size * h_size, 0.0 );
     for(MKL_INT i = 0; i < N; ++i){
       H[(h_size * (i + 1)) + (i + 1)] = en[i]; 
       H[(h_size * (N + i + 1)) + (N + i + 1)] = en[i]; 
@@ -93,7 +93,7 @@ int main(int argc, char **argv)
       H[(h_size * i)] = -1.0 * t; 
     }
     H[0] = epsilon[sp];
-    
+  
     // Superfermion solution to the correlation matrix
     std::vector< std::complex<double> > corr;
     corr = Utils::super_fermion_solve(H, Ge, Gd, h_size);

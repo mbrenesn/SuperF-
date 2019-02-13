@@ -7,10 +7,10 @@ namespace Utils
                              std::vector<double> &Gd,
                              MKL_INT &n)
   {
-    MZType block_1(n * n);
-    MZType block_2(n * n);
-    MZType block_3(n * n);
-    MZType block_4(n * n);
+    MZType block_1(n * n, 0.0);
+    MZType block_2(n * n, 0.0);
+    MZType block_3(n * n, 0.0);
+    MZType block_4(n * n, 0.0);
     for(MKL_INT i = 0; i < n; ++i){
       for(MKL_INT j = 0; j < n; ++j){
         if(i == j){ 
@@ -26,7 +26,7 @@ namespace Utils
       }
     }
 
-    MZType H_super((2 * n) * (2 * n));
+    MZType H_super((2 * n) * (2 * n), 0.0);
     for(MKL_INT i = 0; i < n; ++i){
       for(MKL_INT j = 0; j < n; ++j){
         H_super[(i * (2 * n)) + j] = block_1[(i * n) + j];
@@ -36,8 +36,8 @@ namespace Utils
       }
     } 
     
-    MZType eigvals(2 * n);
-    MZType V((2 * n) * (2 * n));
+    MZType eigvals(2 * n, 0.0);
+    MZType V((2 * n) * (2 * n), 0.0);
     MKL_INT info;
 
     // Diag
@@ -58,7 +58,7 @@ namespace Utils
     }
 
     // Inverse
-    MZType Vinv((2 * n) * (2 * n));
+    MZType Vinv((2 * n) * (2 * n), 0.0);
     std::vector<MKL_INT> ipiv( 2 * n );
     cblas_zcopy( (2 * n) * (2 * n),
                  &V[0],
