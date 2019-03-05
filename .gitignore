@@ -1,2 +1,5 @@
 *.o 
 *.x
+obj/*.o
+*.dat
+job.sh
