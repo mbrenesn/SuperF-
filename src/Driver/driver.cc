@@ -29,21 +29,41 @@ std::vector<double> linspace(double a, double b, size_t n) {
 
 int main(int argc, char **argv)
 {
+  MKL_INT N = 777;
+  double temperature = 0.777;
+  double Gamma = 0.777;
+
+  if(argc != 7){
+    std::cerr << "Usage: " << argv[0] << " --N [sites in leads] --temperature [T] --Gamma [Big Gamma]"
+      << std::endl;
+    exit(1);
+  }
+  for(int i = 0; i < argc; ++i){
+    std::string str = argv[i];
+    if(str == "--N") N = atoi(argv[i + 1]);
+    else if(str == "--temperature") temperature = atof(argv[i + 1]);
+    else if(str == "--Gamma") Gamma = atof(argv[i + 1]);
+    else continue;
+  }
+  if(N == 777 || temperature == 0.777 || Gamma == 0.777){
+    std::cerr << "Error setting parameters" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " --N [sites in leads] --temperature [T] --Gamma [Big Gamma]"
+      << std::endl;
+    exit(1);
+  }
+    
   // Properties of the leads
   double pi = M_PI;
   double w = 5.0;
   double Emin = -1.0 * w;
   double Emax =  1.0 * w;
-  MKL_INT N = 200; // Number of eigenmodes in each lead
   std::vector<double> en = linspace(Emin, Emax, N);
   double d_en = en[1] - en[0];
   double mu_l = 0.5; // chemical potential left
   double mu_r = -0.5; // chemical potential right
-  double t_l = 0.1; // temperature left
-  double t_r = 0.1; // temperature right 
+  double t_l = temperature; // temperature left
+  double t_r = temperature; // temperature right 
 
-  // Gamma from LB
-  double Gamma = 1.0;
   // Hopping parameter between dot and eigenmodes
   double t = std::sqrt( (d_en * Gamma) / (2.0 * pi) );
   // Thermalisation rate
@@ -142,7 +162,7 @@ int main(int argc, char **argv)
   std::vector<double> box(wsamp, 0.0);
   for(MKL_INT i = 0; i < wsamp; ++i){
     if( (w_lb[i] >= Emin) && (w_lb[i] <= Emax) ) 
-      box[i] = Gamma;
+      box[i] = 1.0;
   }
 
   // Re-evaluate Fermi-Dirac distros for left-right
@@ -155,10 +175,12 @@ int main(int argc, char **argv)
 
   // Analytic expressions for real and imaginary self-energy components
   std::vector<double> gamma(box);
+  for(MKL_INT i = 0 ; i < wsamp; ++i)
+    gamma[i] = gamma[i] * Gamma;
   std::vector<double> lambd(wsamp, 0.0);
   for(MKL_INT i = 0 ; i < wsamp; ++i)
     lambd[i] = (gamma[i] / (2.0 * pi)) * std::log( std::fabs( (w_lb[i] - Emin) / (w_lb[i] - Emax) ) );
- 
+  
   std::vector<double> dens_lb(samp, 0.0);
   std::vector<double> curr_lb(samp, 0.0);
   std::vector<double> ener_lb(samp, 0.0);
@@ -166,14 +188,15 @@ int main(int argc, char **argv)
  
     // Density and current
     for(MKL_INT j = 0; j < wsamp; ++j){
-      dens_lb[i] += (1.0 / (2.0 * pi)) * dw * ( gamma[j] * ( f_l_lb[j] + f_r_lb[j] ) )
-        / (std::pow(w_lb[j] - epsilon[i] - (2.0 * lambd[j]), 2) + std::pow(gamma[j], 2));
-      curr_lb[i] += (1.0 / (2.0 * pi)) * dw * ( gamma[j] * gamma[j] * 
-        ( f_l_lb[j] - f_r_lb[j] ) )
-          / (std::pow(w_lb[j] - epsilon[i] - (2.0 * lambd[j]), 2) + std::pow(gamma[j], 2));
-      ener_lb[i] += (1.0 / (2.0 * pi)) * dw * ( w_lb[j] * gamma[j] * gamma[j] * 
-        ( f_l_lb[j] - f_r_lb[j] ) )
-          / (std::pow(w_lb[j] - epsilon[i] - (2.0 * lambd[j]), 2) + std::pow(gamma[j], 2));
+      double denom = std::pow( w_lb[j] - epsilon[i] - (2.0 * lambd[j]), 2.0) 
+          + std::pow( gamma[j], 2.0);
+      double nn = gamma[j] * ( f_l_lb[j] + f_r_lb[j] );
+      double jj = gamma[j] * gamma[j] * ( f_l_lb[j] - f_r_lb[j] );
+      double ee = w_lb [j] * gamma[j] * gamma[j] * ( f_l_lb[j] - f_r_lb[j] );
+
+      dens_lb[i] += (1.0 / (2.0 * pi)) * ( nn / denom ) * dw;
+      curr_lb[i] += (1.0 / (2.0 * pi)) * ( jj / denom ) * dw;
+      ener_lb[i] += (1.0 / (2.0 * pi)) * ( ee / denom ) * dw;
     }
   }
 
