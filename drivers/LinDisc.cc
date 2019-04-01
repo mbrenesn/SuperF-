@@ -1,4 +1,4 @@
-// Comparison of the super-fermion approach with Landauer predictions
+// Comparison of the super-fermion approach with Landauer predictions for a single dot
 
 // Linearly-discretised leads
 
@@ -56,20 +56,20 @@ int main(int argc, char **argv)
     
   // Properties of the leads
   double pi = M_PI;
-  double w = 2.25;
+  double w = 5.0;
   double Emin = -1.0 * w;
   double Emax =  1.0 * w;
   std::vector<double> en = linspace(Emin, Emax, N);
   double d_en = en[1] - en[0];
   double mu_l = 0.25; // chemical potential left
   double mu_r = -0.25; // chemical potential right
-  double t_l = 1.1 * temperature; // temperature left
+  double t_l = temperature; // temperature left
   double t_r = temperature; // temperature right 
 
   // Hopping parameter between dot and eigenmodes
   double t = std::sqrt( (d_en * Gamma) / (2.0 * pi) );
   // Thermalisation rate
-  double therm = 2.0 * d_en;
+  double therm = d_en;
 
   double tic = seconds();
 
@@ -86,21 +86,19 @@ int main(int argc, char **argv)
   std::vector<double> Gd(h_size);
   Ge[0] = 0.0; Gd[0] = 0.0;
   for(MKL_INT i = 0; i < N; ++i){
-    Ge[i + 1] = therm * f_l[i];
-    Ge[N + i + 1] = therm * f_r[i];
-    Gd[i + 1] = therm * (1.0 - f_l[i]);
-    Gd[N + i + 1] = therm * (1.0 - f_r[i]);
+    Ge[i + 1] = 0.5 * therm * f_l[i];
+    Ge[N + i + 1] = 0.5 * therm * f_r[i];
+    Gd[i + 1] = 0.5 * therm * (1.0 - f_l[i]);
+    Gd[N + i + 1] = 0.5 * therm * (1.0 - f_r[i]);
   }
 
   // Dot energy
   MKL_INT samp = 20;
-  std::vector<double> epsilon = linspace(-1.8 * w, 1.8 * w, samp);
+  std::vector<double> epsilon = linspace(-1.0 * w, 1.0 * w, samp);
 
   std::vector<double> dens_sf(samp, 0.0);
   std::vector<double> curr_sf(samp, 0.0);
-  std::vector<double> ener_sf_dot(samp, 0.0);
-  std::vector<double> ener_sf_lead_left(samp, 0.0);
-  std::vector<double> ener_sf_lead_right(samp, 0.0);
+  std::vector<double> ener_sf(samp, 0.0);
   for(MKL_INT sp = 0; sp < samp; ++sp){
     
     // Superfermion solution
@@ -128,7 +126,7 @@ int main(int argc, char **argv)
     std::vector<double> curr(h_size * h_size);
     for(MKL_INT i = 0; i < h_size; ++i){
       for(MKL_INT j = 0; j < h_size; ++j){
-        curr[(i * h_size) + j] = real(-1.0 * im * H[(i * h_size) + j]
+        curr[(i * h_size) + j] = std::real(-1.0 * im * H[(i * h_size) + j]
           * (corr[(i * h_size) + j] - corr[(j * h_size) + i]));
       }
     }
@@ -140,26 +138,29 @@ int main(int argc, char **argv)
       j_right += curr[N + i];
     }
 
-    double ener_left_dot = epsilon[sp] * j_left;
-    double ener_right_dot = epsilon[sp] * j_right;
+    //Energy
+    std::vector<double> cross(h_size * h_size);
+    for(MKL_INT i = 0; i < h_size; ++i){
+      for(MKL_INT j = 0; j < h_size; ++j){
+        cross[(i * h_size) + j] = std::real( -1.0 * H[(i * h_size) + j]
+          * (corr[(i * h_size) + j] + corr[(j * h_size) + i]));
+      }
+    }
 
-    double ener_lead_left = 0.0;
-    double ener_lead_right = 0.0;
+    double accum = 0.0;
     for(MKL_INT i = 1; i < (N + 1); ++i){
-      ener_lead_left += curr[i] * en[i - 1];
-      ener_lead_right += curr[N + i] * en[i - 1];
+      double n_local = std::real( corr[(i * h_size) + i] );
+      accum += ( cross[i] * therm * 0.25 ) + ( 0.5 * therm * en[i - 1] * (f_l[i - 1] - n_local) );
     }
 
     dens_sf[sp] = n;
     curr_sf[sp] = j_left;
-    ener_sf_dot[sp] = ener_left_dot;
-    ener_sf_lead_left[sp] = ener_lead_left;
-    ener_sf_lead_right[sp] = ener_lead_right;
+    ener_sf[sp] = accum;
   }
 
   // Landauer-Buttiker solutions
   MKL_INT wsamp = 10000;
-  std::vector<double> w_lb = linspace(-1.3 * w, 1.3 * w, wsamp);
+  std::vector<double> w_lb = linspace(-1.0 * w, 1.0 * w, wsamp);
   double dw = w_lb[1] - w_lb[0];
   std::vector<double> box(wsamp, 0.0);
   for(MKL_INT i = 0; i < wsamp; ++i){
@@ -217,12 +218,10 @@ int main(int argc, char **argv)
   std::cout << "# E_min = " << Emin << " E_max = " << Emax << std::endl;
   std::cout << "# Time = " << toc - tic << std::endl;
   std::cout << "# Dot_En" << " " << "Dot_n_LB" << " " << "Dot_n_SF" << " " << 
-    "J_left_LB" << " " << "J_left_SF" << " " << "J_ener_LB" << " " << "J_ener_SF_dot" <<
-      " " << "J_ener_SF_lead_left" << " " << "J_ener_SF_lead_right" << std::endl;
+    "J_left_LB" << " " << "J_left_SF" << " " << "J_ener_LB" << " " << "J_ener_SF" << std::endl;
   for(MKL_INT sp = 0; sp < samp; ++sp){
     std::cout << epsilon[sp] << " " << dens_lb[sp] << " " << dens_sf[sp] << " " <<
-      curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf_dot[sp] << 
-        " " << ener_sf_lead_left[sp] << " " << ener_sf_lead_right[sp] << std::endl; 
+      curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf[sp] << std::endl; 
   }
 
   return 0;

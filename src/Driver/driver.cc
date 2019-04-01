@@ -1,4 +1,4 @@
-// Comparison of the super-fermion approach with Landauer predictions
+// Comparison of the super-fermion approach with Landauer predictions for a single dot
 
 // Log-Linear lead discretisation 
 
@@ -63,14 +63,14 @@ int main(int argc, char **argv)
   // Properties of the leads
   double mu_l = mu + (V / 2.0); // chemical potential left
   double mu_r = mu - (V / 2.0); // chemical potential right
-  double t_l = 1.1 * temperature; // temperature left
+  double t_l = temperature; // temperature left
   double t_r = temperature; // temperature right 
   // Here, we use a Log-Linear discretisation of the leads, N_lin are discretised linearly
   // in the vicinity of epsilon and N_log are discretised logarithmically beyond N_lin
   MKL_INT N = N_lin + N_log + N_log;
   double base_log = 2.0;
   double pi = M_PI;
-  double w = 5.0;
+  double w = 8.0;
   double Emin = -1.0 * w;
   double Emax =  1.0 * w;
   double Estar_min = -0.5 * w;
@@ -129,9 +129,9 @@ int main(int argc, char **argv)
   }
 
   // Dot energies to sample
-  MKL_INT samp = 1;
-  //std::vector<double> epsilon = linspace(-0.5, 0.5, samp);
-  std::vector<double> epsilon(1, 1.0);
+  MKL_INT samp = 20;
+  std::vector<double> epsilon = linspace(-6.5, 6.5, samp);
+  //std::vector<double> epsilon(1, 1.0);
   
   // Fermi-Dirac Distributions
   std::vector<double> f_l(N);
@@ -146,15 +146,15 @@ int main(int argc, char **argv)
   std::vector<double> Gd(h_size);
   Ge[0] = 0.0; Gd[0] = 0.0;
   for(MKL_INT i = 0; i < N; ++i){
-    Ge[i + 1] = therm[i] * f_l[i];
-    Ge[N + i + 1] = therm[i] * f_r[i];
-    Gd[i + 1] = therm[i] * (1.0 - f_l[i]);
-    Gd[N + i + 1] = therm[i] * (1.0 - f_r[i]);
+    Ge[i + 1] = 0.5 * therm[i] * f_l[i];
+    Ge[N + i + 1] = 0.5 * therm[i] * f_r[i];
+    Gd[i + 1] = 0.5 * therm[i] * (1.0 - f_l[i]);
+    Gd[N + i + 1] = 0.5 * therm[i] * (1.0 - f_r[i]);
   }
 
   std::vector<double> dens_sf(samp, 0.0);
   std::vector<double> curr_sf(samp, 0.0);
-  std::vector<double> ener_sf_dot(samp, 0.0);
+  std::vector<double> ener_sf(samp, 0.0);
   for(MKL_INT sp = 0; sp < samp; ++sp){  
     // Superfermion solution
     // Construct the entire system Hamiltonian: dot + left leaf + right lead
@@ -183,7 +183,7 @@ int main(int argc, char **argv)
     std::vector<double> curr(h_size * h_size);
     for(MKL_INT i = 0; i < h_size; ++i){
       for(MKL_INT j = 0; j < h_size; ++j){
-        curr[(i * h_size) + j] = real(-1.0 * im * H[(i * h_size) + j]
+        curr[(i * h_size) + j] = std::real(-1.0 * im * H[(i * h_size) + j]
           * (corr[(i * h_size) + j] - corr[(j * h_size) + i]));
       }
     }
@@ -195,12 +195,25 @@ int main(int argc, char **argv)
       j_right += curr[N + i];
     }
 
-    double ener_left_dot = epsilon[sp] * j_left;
-    double ener_right_dot = epsilon[sp] * j_right;
+    // Energy
+    std::vector<double> cross(h_size * h_size);
+    for(MKL_INT i = 0; i < h_size; ++i){
+      for(MKL_INT j = 0; j < h_size; ++j){
+        cross[(i * h_size) + j] = std::real( -1.0 * H[(i * h_size) + j]
+          * (corr[(i * h_size) + j] + corr[(j * h_size) + i]));
+      }
+    }
+
+    double accum = 0.0;
+    for(MKL_INT i = 1; i < (N + 1); ++i){
+      double n_local = std::real( corr[(i * h_size) + i] );
+      accum += ( cross[i] * therm[i - 1] * 0.25 ) + 
+        ( 0.5 * therm[i - 1] * en[i - 1] * (f_l[i - 1] - n_local) ); 
+    }
 
     dens_sf[sp] = n;
     curr_sf[sp] = j_left;
-    ener_sf_dot[sp] = ener_left_dot;
+    ener_sf[sp] = accum;
   }
 
   // Landauer-Buttiker solutions
@@ -250,7 +263,7 @@ int main(int argc, char **argv)
 
   double toc = seconds();
   std::cout << std::fixed;
-  std::cout.precision(16);
+  std::cout.precision(8);
 
   //Power
   std::vector<double> power_lb(samp, 0.0);
@@ -265,22 +278,24 @@ int main(int argc, char **argv)
   std::vector<double> efficiency_sf(samp, 0.0);
   for(MKL_INT sp = 0; sp < samp; ++sp){
     efficiency_lb[sp] = power_lb[sp] / ( ener_lb[sp] - (mu_l * curr_lb[sp]) );
-    efficiency_sf[sp] = power_sf[sp] / ( ener_sf_dot[sp] - (mu_l * curr_sf[sp]) );
+    efficiency_sf[sp] = power_sf[sp] / ( ener_sf[sp] - (mu_l * curr_sf[sp]) );
     efficiency_lb[sp] = efficiency_lb[sp] / carnot_ef;
     efficiency_sf[sp] = efficiency_sf[sp] / carnot_ef;
-    std::cout << "Particle " << curr_lb[sp] << " " << curr_sf[sp] << std::endl;
-    std::cout << "Power " << power_lb[sp] << " " << power_sf[sp] << std::endl;
-    std::cout << "Energy " << ener_lb[sp] << " " << ener_sf_dot[sp] << std::endl;
+    //std::cout << "Particle " << curr_lb[sp] << " " << curr_sf[sp] << std::endl;
+    //std::cout << "Power " << power_lb[sp] << " " << power_sf[sp] << std::endl;
+    //std::cout << "Energy " << ener_lb[sp] << " " << ener_sf_dot[sp] << std::endl;
   }
   
-  std::cout << "# mu_l = " << mu_l << " mu_r = " << mu_r << std::endl;
-  std::cout << "# t_l = " << t_l << " t_r = " << t_r << std::endl;
+  //std::cout << "# mu_l = " << mu_l << " mu_r = " << mu_r << std::endl;
+  //std::cout << "# t_l = " << t_l << " t_r = " << t_r << std::endl;
   //std::cout << "# Time = " << toc - tic << std::endl;
   //std::cout << "# mu" << " " << "V" << " " << "Power_LB" << " " << "Power_SF" << " " <<
   //  "Efficiency_LB" << " " << "Effciency_SF" << std::endl;
   for(MKL_INT sp = 0; sp < samp; ++sp){
-    std::cout << mu - epsilon[sp] << " " << V << " " << power_lb[sp] << " " <<
-      power_sf[sp] << " " << efficiency_lb[sp] << " " << efficiency_sf[sp] << std::endl; 
+    //std::cout << mu - epsilon[sp] << " " << V << " " << power_lb[sp] << " " <<
+    //  power_sf[sp] << " " << efficiency_lb[sp] << " " << efficiency_sf[sp] << std::endl; 
+    std::cout << epsilon[sp] << " " << dens_lb[sp] << " " << dens_sf[sp] << " " <<
+      curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf[sp] << std::endl; 
   }
 
   return 0;
