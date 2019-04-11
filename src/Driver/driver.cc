@@ -1,6 +1,6 @@
-// Comparison of the super-fermion approach with Landauer predictions for a single dot
+// Comparison of the super-fermion approach with Landauer predictions
 
-// Log-Linear lead discretisation 
+// Multiple fermionic sites in the central system
 
 #include <iostream>
 #include <vector>
@@ -34,28 +34,34 @@ int main(int argc, char **argv)
 {
   MKL_INT N_lin = 777;
   MKL_INT N_log = 777;
+  MKL_INT L = 777;
   double temperature = 0.777;
   double Gamma = 0.777;
   double mu = 0.777;
   double V = 0.777;
+  double epsilon_i = 0.777; // self-energy in each site
+  double t_s = 0.777; //hopping within system
 
-  if(argc != 13){
-    std::cerr << "Usage: " << argv[0] << " --N_lin [lin discretised modes] --N_log [log discretised modes PER SIDE] --temperature [T] --Gamma [Big Gamma] --mu [mu] --V [V]" << std::endl;
+  if(argc != 19){
+    std::cerr << "Usage: " << argv[0] << " --N_lin [lin discretised modes] --N_log [log discretised modes PER SIDE] --L [sites in system] --eps [On-site energies] --ts [System hoppings] --temperature [T] --Gamma [Big Gamma] --mu [mu] --V [V]" << std::endl;
     exit(1);
   }
   for(int i = 0; i < argc; ++i){
     std::string str = argv[i];
     if(str == "--N_lin") N_lin = atoi(argv[i + 1]);
     else if(str == "--N_log") N_log = atoi(argv[i + 1]);
+    else if(str == "--L") L = atoi(argv[i + 1]);
+    else if(str == "--eps") epsilon_i = atof(argv[i + 1]);
+    else if(str == "--ts") t_s = atof(argv[i + 1]);
     else if(str == "--temperature") temperature = atof(argv[i + 1]);
     else if(str == "--Gamma") Gamma = atof(argv[i + 1]);
     else if(str == "--mu") mu = atof(argv[i + 1]);
     else if(str == "--V") V = atof(argv[i + 1]);
     else continue;
   }
-  if(N_lin == 777 || N_log == 777 || temperature == 0.777 || Gamma == 0.777 || mu == 0.777 || V == 0.777){
+  if(N_lin == 777 || N_log == 777 || L == 777 || temperature == 0.777 || Gamma == 0.777 || mu == 0.777 || V == 0.777 || epsilon_i == 0.777 || t_s == 0.777){
     std::cerr << "Error setting parameters" << std::endl;
-    std::cerr << "Usage: " << argv[0] << " --N_lin [lin discretised modes] --N_log [log discretised modes PER SIDE] --temperature [T] --Gamma [Big Gamma] --mu [mu] --V [V]" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " --N_lin [lin discretised modes] --N_log [log discretised modes PER SIDE] --L [sites in system] --temperature [T] --Gamma [Big Gamma] --mu [mu] --V [V]" << std::endl;
     exit(1);
   }
 
@@ -112,11 +118,14 @@ int main(int argc, char **argv)
     therm_log_left[i] = std::abs(log_spacings_right[N_log - 1 - i] - log_spacings_right[N_log - i]);
   }
 
+  // Vector containing the discretised energies of the leads
   std::vector<double> en;
   en.insert(en.end(), en_log_left.begin(), en_log_left.end());
   en.insert(en.end(), en_lin.begin(), en_lin.end());
   en.insert(en.end(), en_log_right.begin(), en_log_right.end());
 
+  // Vector containing the thermalising rate for each mode in the leads, differs depending on the 
+  // spacings
   std::vector<double> therm;
   therm.insert(therm.end(), therm_log_left.begin(), therm_log_left.end());
   therm.insert(therm.end(), therm_lin.begin(), therm_lin.end());
@@ -128,11 +137,6 @@ int main(int argc, char **argv)
     t[i] = -1.0 * std::sqrt( (therm[i] * Gamma) / (2.0 * pi) );
   }
 
-  // Dot energies to sample
-  MKL_INT samp = 20;
-  std::vector<double> epsilon = linspace(-6.5, 6.5, samp);
-  //std::vector<double> epsilon(1, 1.0);
-  
   // Fermi-Dirac Distributions
   std::vector<double> f_l(N);
   std::vector<double> f_r(N);
@@ -141,58 +145,69 @@ int main(int argc, char **argv)
     f_r[i] = 1.0 / (1.0 + (std::exp( (en[i] - mu_r) / t_r )));
   }
   // Thermalisation excitation and decay rates
-  MKL_INT h_size = (2 * N) + 1;
-  std::vector<double> Ge(h_size);
-  std::vector<double> Gd(h_size);
-  Ge[0] = 0.0; Gd[0] = 0.0;
+  MKL_INT h_size = (2 * N) + L;
+  std::vector<double> Ge(h_size, 0.0);
+  std::vector<double> Gd(h_size, 0.0);
   for(MKL_INT i = 0; i < N; ++i){
-    Ge[i + 1] = 0.5 * therm[i] * f_l[i];
-    Ge[N + i + 1] = 0.5 * therm[i] * f_r[i];
-    Gd[i + 1] = 0.5 * therm[i] * (1.0 - f_l[i]);
-    Gd[N + i + 1] = 0.5 * therm[i] * (1.0 - f_r[i]);
+    Ge[i + L] = therm[i] * f_l[i];
+    Ge[N + i + L] = therm[i] * f_r[i];
+    Gd[i + L] = therm[i] * (1.0 - f_l[i]);
+    Gd[N + i + L] = therm[i] * (1.0 - f_r[i]);
+  }
+  
+  // System parameters and system Hamiltonian
+  MKL_INT samp = 1;
+    
+  // Superfermion solution
+  // Construct the entire system Hamiltonian: system + left lead + right lead
+  std::vector<double> H( h_size * h_size, 0.0 );
+  if( L == 0 ) { std::cerr << "L can't be zero" << std::endl; exit(1); }
+  else if( L == 1 ) H[0] = epsilon_i;
+  else{
+    for(MKL_INT i = 1; i < (L - 1); ++i){
+      H[(i * h_size) + i] = epsilon_i;
+      H[(i * h_size) + i - 1] = -1.0 * t_s;
+      H[(i * h_size) + i + 1] = -1.0 * t_s;
+    }
+    H[0] = epsilon_i;
+    H[1] = -1.0 * t_s;
+    H[((L - 1) * h_size) + L - 1] = epsilon_i;
+    H[((L - 1) * h_size) + L - 2] = -1.0 * t_s;
+  }
+  for(MKL_INT i = 0; i < N; ++i){
+    H[(h_size * (i + L)) + (i + L)] = en[i]; 
+    H[(h_size * (N + i + L)) + (N + i + L)] = en[i]; 
+  }
+  for(MKL_INT i = 0; i < N; ++i){
+    H[i + L] = t[i];
+    H[i + ((L - 1) * h_size) + (L + N)] = t[i];
+    H[(h_size * (i + L) )] = t[i];
+    H[(h_size * (i + L) ) + (N * h_size) + (L - 1)] = t[i];
   }
 
-  std::vector<double> dens_sf(samp, 0.0);
   std::vector<double> curr_sf(samp, 0.0);
   std::vector<double> ener_sf(samp, 0.0);
   for(MKL_INT sp = 0; sp < samp; ++sp){  
-    // Superfermion solution
-    // Construct the entire system Hamiltonian: dot + left leaf + right lead
-    std::vector<double> H( h_size * h_size, 0.0 );
-    for(MKL_INT i = 0; i < N; ++i){
-      H[(h_size * (i + 1)) + (i + 1)] = en[i]; 
-      H[(h_size * (N + i + 1)) + (N + i + 1)] = en[i]; 
-    }
-    for(MKL_INT i = 1; i < (N + 1); ++i){
-      H[i] = t[i - 1];
-      H[i + N] = t[i - 1];
-      H[(h_size * i)] = t[i - 1];
-      H[(h_size * i) + (N * h_size)] = t[i - 1];
-    }
-    H[0] = epsilon[sp];
-    
+  
     // Superfermion solution to the correlation matrix
     std::vector< std::complex<double> > corr;
     corr = Utils::super_fermion_solve(H, Ge, Gd, h_size);
-
-    // Dot density
-    double n = real(corr[0]);
 
     // Current
     std::complex<double> im(0.0, 1.0);
     std::vector<double> curr(h_size * h_size);
     for(MKL_INT i = 0; i < h_size; ++i){
       for(MKL_INT j = 0; j < h_size; ++j){
-        curr[(i * h_size) + j] = std::real(-1.0 * im * H[(i * h_size) + j]
+        curr[(i * h_size) + j] = real(-1.0 * im * H[(i * h_size) + j]
           * (corr[(i * h_size) + j] - corr[(j * h_size) + i]));
       }
     }
     
     double j_left = 0.0;
     double j_right = 0.0;
-    for(MKL_INT i = 1; i < (N + 1); ++i){
-      j_left += curr[i];
-      j_right += curr[N + i];
+    for(MKL_INT i = 0; i < N; ++i){
+      j_left += curr[i + L];
+      j_right += curr[i + L + N];
     }
 
     // Energy
@@ -205,27 +220,26 @@ int main(int argc, char **argv)
     }
 
     double accum = 0.0;
-    for(MKL_INT i = 1; i < (N + 1); ++i){
+    for(MKL_INT i = L; i < (N + L); ++i){
       double n_local = std::real( corr[(i * h_size) + i] );
-      accum += ( cross[i] * therm[i - 1] * 0.25 ) + 
-        ( 0.5 * therm[i - 1] * en[i - 1] * (f_l[i - 1] - n_local) ); 
+      accum += ( cross[i] * therm[i - L] * 0.5 ) + 
+        ( 1.0 * therm[i - L] * en[i - L] * (f_l[i - L] - n_local) ); 
     }
 
-    dens_sf[sp] = n;
     curr_sf[sp] = j_left;
     ener_sf[sp] = accum;
   }
 
-  // Landauer-Buttiker solutions
+  // Landauer-Buttiker solutions for tight-binding central system
   MKL_INT wsamp = 10000;
-  std::vector<double> w_lb = linspace(-1.3 * w, 1.3 * w, wsamp);
+  std::vector<double> w_lb = linspace(-1.0 * w, 1.0 * w, wsamp);
   double dw = w_lb[1] - w_lb[0];
   std::vector<double> box(wsamp, 0.0);
   for(MKL_INT i = 0; i < wsamp; ++i){
-    if( (w_lb[i] >= Emin) && (w_lb[i] <= Emax) ) 
+    if( (w_lb[i] >= Emin) && (w_lb[i] <= Emax) )
       box[i] = 1.0;
   }
-
+  
   // Re-evaluate Fermi-Dirac distros for left-right
   std::vector<double> f_l_lb(wsamp);
   std::vector<double> f_r_lb(wsamp);
@@ -234,30 +248,41 @@ int main(int argc, char **argv)
     f_r_lb[i] = 1.0 / (1.0 + (std::exp( (w_lb[i] - mu_r) / t_r ))) * box[i];
   }
 
-  // Analytic expressions for real and imaginary self-energy components
-  std::vector<double> gamma(box);
-  for(MKL_INT i = 0 ; i < wsamp; ++i)
-    gamma[i] = gamma[i] * Gamma;
-  std::vector<double> lambd(wsamp, 0.0);
-  for(MKL_INT i = 0 ; i < wsamp; ++i)
-    lambd[i] = (gamma[i] / (2.0 * pi)) * std::log( std::fabs( (w_lb[i] - Emin) / (w_lb[i] - Emax) ) );
-  
-  std::vector<double> dens_lb(samp, 0.0);
+  // Transmission function
+  std::vector<double> transmission(wsamp, 0.0);
+  for(MKL_INT i = 0; i < wsamp; ++i){
+
+    // M(w) = Iw - H_s - \Sigma
+    std::vector< std::complex<double> > m_diag(L, 0.0);
+    for(MKL_INT j = 0; j < L; ++j){
+      m_diag[j] = w_lb[i] - epsilon_i;
+    }
+    std::complex<double> ig(0.0, Gamma / 2.0);
+    m_diag[0] += ig;
+    m_diag[L - 1] += ig;
+
+    // Determinant of M(w)
+    std::complex<double> f_m1(0.0, 0.0);
+    std::complex<double> f_0(1.0, 0.0);
+    std::complex<double> f_n;
+    for(MKL_INT j = 0; j < L; ++j){
+      f_n = (m_diag[j] * f_0) - (t_s * t_s * f_m1);
+      f_m1 = f_0;
+      f_0 = f_n;
+    }
+
+    if( L == 1 ) transmission[i] = (Gamma * Gamma) / std::norm(f_n);
+    else transmission[i] = (Gamma * Gamma * std::pow(t_s, 2 * (L - 1))) / std::pow( std::abs(f_n), 2 );
+  }
+
   std::vector<double> curr_lb(samp, 0.0);
   std::vector<double> ener_lb(samp, 0.0);
   for(MKL_INT i = 0; i < samp; ++i){
  
     // Density and current
     for(MKL_INT j = 0; j < wsamp; ++j){
-      double denom = std::pow( w_lb[j] - epsilon[i] - (2.0 * lambd[j]), 2.0) 
-          + std::pow( gamma[j], 2.0);
-      double nn = gamma[j] * ( f_l_lb[j] + f_r_lb[j] );
-      double jj = gamma[j] * gamma[j] * ( f_l_lb[j] - f_r_lb[j] );
-      double ee = w_lb [j] * gamma[j] * gamma[j] * ( f_l_lb[j] - f_r_lb[j] );
-
-      dens_lb[i] += (1.0 / (2.0 * pi)) * ( nn / denom ) * dw;
-      curr_lb[i] += (1.0 / (2.0 * pi)) * ( jj / denom ) * dw;
-      ener_lb[i] += (1.0 / (2.0 * pi)) * ( ee / denom ) * dw;
+      curr_lb[i] += (1.0 / (2.0 * pi)) * transmission[j] * (f_l_lb[j] - f_r_lb[j]) * dw;
+      ener_lb[i] += (1.0 / (2.0 * pi)) * w_lb[j] * transmission[j] * (f_l_lb[j] - f_r_lb[j]) * dw;
     }
   }
 
@@ -281,21 +306,10 @@ int main(int argc, char **argv)
     efficiency_sf[sp] = power_sf[sp] / ( ener_sf[sp] - (mu_l * curr_sf[sp]) );
     efficiency_lb[sp] = efficiency_lb[sp] / carnot_ef;
     efficiency_sf[sp] = efficiency_sf[sp] / carnot_ef;
-    //std::cout << "Particle " << curr_lb[sp] << " " << curr_sf[sp] << std::endl;
-    //std::cout << "Power " << power_lb[sp] << " " << power_sf[sp] << std::endl;
-    //std::cout << "Energy " << ener_lb[sp] << " " << ener_sf_dot[sp] << std::endl;
   }
-  
-  //std::cout << "# mu_l = " << mu_l << " mu_r = " << mu_r << std::endl;
-  //std::cout << "# t_l = " << t_l << " t_r = " << t_r << std::endl;
-  //std::cout << "# Time = " << toc - tic << std::endl;
-  //std::cout << "# mu" << " " << "V" << " " << "Power_LB" << " " << "Power_SF" << " " <<
-  //  "Efficiency_LB" << " " << "Effciency_SF" << std::endl;
+ 
   for(MKL_INT sp = 0; sp < samp; ++sp){
-    //std::cout << mu - epsilon[sp] << " " << V << " " << power_lb[sp] << " " <<
-    //  power_sf[sp] << " " << efficiency_lb[sp] << " " << efficiency_sf[sp] << std::endl; 
-    std::cout << epsilon[sp] << " " << dens_lb[sp] << " " << dens_sf[sp] << " " <<
-      curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf[sp] << std::endl; 
+    std::cout << L << " " << curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf[sp] << std::endl;
   }
 
   return 0;
