@@ -157,7 +157,7 @@ int main(int argc, char **argv)
   
   // System parameters and system Hamiltonian
   MKL_INT samp = 1;
-    
+
   // Superfermion solution
   // Construct the entire system Hamiltonian: system + left lead + right lead
   std::vector<double> H( h_size * h_size, 0.0 );
@@ -280,7 +280,7 @@ int main(int argc, char **argv)
   for(MKL_INT i = 0; i < samp; ++i){
  
     // Density and current
-    for(MKL_INT j = 0; j < wsamp; ++j){
+    for(MKL_INT j = 0; j < wsamp - 1; ++j){
       curr_lb[i] += (1.0 / (2.0 * pi)) * transmission[j] * (f_l_lb[j] - f_r_lb[j]) * dw;
       ener_lb[i] += (1.0 / (2.0 * pi)) * w_lb[j] * transmission[j] * (f_l_lb[j] - f_r_lb[j]) * dw;
     }
@@ -307,9 +307,16 @@ int main(int argc, char **argv)
     efficiency_lb[sp] = efficiency_lb[sp] / carnot_ef;
     efficiency_sf[sp] = efficiency_sf[sp] / carnot_ef;
   }
- 
+
+  std::cout << "# L = " << L << " N = " << N << std::endl;
+  std::cout << "# T_L = " << t_l << " T_R = " << t_r << std::endl;
+  std::cout << "# mu_L = " << mu_l << " mu_R = " << mu_r << std::endl;
+  std::cout << "# epsilon = " << epsilon_i << " t_S = " << t_s << std::endl;
+  std::cout << "# Gamma = " << Gamma << std::endl;
+
   for(MKL_INT sp = 0; sp < samp; ++sp){
-    std::cout << L << " " << curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf[sp] << std::endl;
+    std::cout << L << " " << N << " " << curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf[sp] << std::endl;
+    //std::cout << mu - epsilon_i << " " << V << " " << power_lb[sp] << " " << power_sf[sp] << " " << efficiency_lb[sp] << " " << efficiency_sf[sp] << std::endl;
   }
 
   return 0;
