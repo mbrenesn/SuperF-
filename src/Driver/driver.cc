@@ -69,7 +69,7 @@ int main(int argc, char **argv)
   // Properties of the leads
   double mu_l = mu + (V / 2.0); // chemical potential left
   double mu_r = mu - (V / 2.0); // chemical potential right
-  double t_l = temperature; // temperature left
+  double t_l = 1.1 * temperature; // temperature left
   double t_r = temperature; // temperature right 
   // Here, we use a Log-Linear discretisation of the leads, N_lin are discretised linearly
   // in the vicinity of epsilon and N_log are discretised logarithmically beyond N_lin
@@ -257,7 +257,10 @@ int main(int argc, char **argv)
     for(MKL_INT j = 0; j < L; ++j){
       m_diag[j] = w_lb[i] - epsilon_i;
     }
-    std::complex<double> ig(0.0, Gamma / 2.0);
+    double r_part = (-1.0 * Gamma / (2.0 * pi)) 
+        * std::log( std::abs( (w_lb[i] - Emin)/(w_lb[i] - Emax) ) );
+    double i_part = Gamma / 2.0;
+    std::complex<double> ig(r_part, i_part);
     m_diag[0] += ig;
     m_diag[L - 1] += ig;
 
@@ -274,7 +277,6 @@ int main(int argc, char **argv)
     if( L == 1 ) transmission[i] = (Gamma * Gamma) / std::norm(f_n);
     else transmission[i] = (Gamma * Gamma * std::pow(t_s, 2 * (L - 1))) / std::pow( std::abs(f_n), 2 );
   }
-
   std::vector<double> curr_lb(samp, 0.0);
   std::vector<double> ener_lb(samp, 0.0);
   for(MKL_INT i = 0; i < samp; ++i){
@@ -315,7 +317,7 @@ int main(int argc, char **argv)
   std::cout << "# Gamma = " << Gamma << std::endl;
 
   for(MKL_INT sp = 0; sp < samp; ++sp){
-    std::cout << L << " " << N << " " << curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf[sp] << std::endl;
+    std::cout << t_l << " " << curr_lb[sp] << " " << curr_sf[sp] << " " << ener_lb[sp] << " " << ener_sf[sp] << std::endl;
     //std::cout << mu - epsilon_i << " " << V << " " << power_lb[sp] << " " << power_sf[sp] << " " << efficiency_lb[sp] << " " << efficiency_sf[sp] << std::endl;
   }
 
